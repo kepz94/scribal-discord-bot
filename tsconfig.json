@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
+  },
+  // tests/ imports node:test and node:assert, whose types live in @types/node, which is not a devDependency (SBD-1).
+  "exclude": ["node_modules", "tests"]
+}

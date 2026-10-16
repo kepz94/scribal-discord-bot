@@ -1,0 +1,18 @@
+{
+  "name": "scribal-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scribal Bot for Discord v1: a private slash-command scripture bot over Scribal's library and Webster 1828.",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build-data.ts"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
