@@ -19,13 +19,14 @@ function fakeFetch(status: number, body: unknown, calls: Call[]): typeof fetch {
 }
 const echo = (init: RequestInit): { name: string }[] => JSON.parse(String(init.body)) as { name: string }[];
 
-test('the M1 set is /verse, /chapter, /define, each with one required string option', () => {
+test('the set is /verse, /chapter, /define (one required string option each) and /help (none, v1.1)', () => {
   assert.deepEqual(
     COMMANDS.map((c) => [c.type, c.name, c.options.map((o) => [o.type, o.name, o.required])]),
     [
       [1, 'verse', [[3, 'reference', true]]],
       [1, 'chapter', [[3, 'reference', true]]],
       [1, 'define', [[3, 'word', true]]],
+      [1, 'help', []],
     ],
   );
 });
@@ -46,10 +47,11 @@ test('names and descriptions follow Discord\'s rules', () => {
 });
 
 test('the descriptions are the approved wording', () => {
-  assert.deepEqual(COMMANDS.map((c) => [c.description, c.options[0].description]), [
+  assert.deepEqual(COMMANDS.map((c) => [c.description, c.options[0]?.description]), [
     ['Look up verses: one, a range, or several separated by commas', 'e.g. Alma 32:21, Alma 32:21-23, or D&C 4:2, Moroni 10:4'],
     ['Read a whole chapter', 'e.g. 1 Nephi 3 or Kirtland Era 20'],
     ["Look up a word in Webster's 1828 dictionary", 'One word, e.g. faith'],
+    ['Show all commands and how to use them', undefined],
   ]);
 });
 
@@ -65,7 +67,7 @@ test('register PUTs the whole set to the guild endpoint with the bot token and D
   assert.match(headers.get('user-agent') ?? '', /^DiscordBot \(https:\/\/github\.com\/kepz94\/scribal-discord-bot, 1\.0\.0\)$/);
   assert.deepEqual(echo(calls[0].init), JSON.parse(JSON.stringify(COMMANDS)));
   assert.equal(result.ok, true);
-  assert.deepEqual(result.lines, ['Discord answered 200', 'Registered: /verse, /chapter, /define']);
+  assert.deepEqual(result.lines, ['Discord answered 200', 'Registered: /verse, /chapter, /define, /help']);
 });
 
 test('printed lines never carry the token or an ID', async () => {
@@ -89,7 +91,7 @@ test('an error answer fails with Discord\'s message and code', async () => {
 test('a 200 whose command names differ from the set fails', async () => {
   const result = await register(ENV, fakeFetch(200, [{ name: 'verse' }], []));
   assert.equal(result.ok, false);
-  assert.equal(result.lines.at(-1), 'Registered: /verse — expected /verse, /chapter, /define');
+  assert.equal(result.lines.at(-1), 'Registered: /verse — expected /verse, /chapter, /define, /help');
 });
 
 test('a missing secret fails before any request, naming the variable only', async () => {

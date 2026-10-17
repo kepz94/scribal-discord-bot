@@ -42,18 +42,18 @@ test('Alma 32:21 → one card: volume author, stored reference title, text only,
   assert.equal(CARD_COLOR, 0x8b5cf6);
 });
 
-test('Alma 32:21-23 → title with en dash, one bold-numbered paragraph per verse, blank line between', () => {
+test('Alma 32:21-23 → title with en dash, one bold-numbered paragraph per verse, a line break between (v1.1)', () => {
   const [card] = onlyPage('Alma 32:21-23').embeds;
   assert.equal(card.title, 'Alma 32:21–23');
   assert.equal(
     card.description,
-    [21, 22, 23].map((v) => `**${v}** ${verse('alma', 32, v)}`).join('\n\n'),
+    [21, 22, 23].map((v) => `**${v}** ${verse('alma', 32, v)}`).join('\n'),
   );
 });
 
 test('Kirtland Era 1:1 → sermon card: author names the sermon, title is the date, footer is the source', () => {
   const [card] = onlyPage('Kirtland Era 1:1').embeds;
-  assert.equal(card.author.name, 'Sermons of the Prophet Joseph Smith · Kirtland Era 1:1');
+  assert.equal(card.author?.name, 'Sermons of the Prophet Joseph Smith · Kirtland Era 1:1');
   assert.equal(card.title, 'Nov., 1831');
   assert.deepEqual(card.footer, { text: 'Source: DHC 1:235-236' });
   assert.equal(card.description, verse('kirtlandera', 1, 1));
@@ -75,7 +75,7 @@ test('markdown characters in scripture are escaped (Nauvoo Era 1:17 "* *")', () 
 test('a short list → one page, one card per reference in typed order, no content', () => {
   const page = onlyPage('d&c 4:2, moroni 10:4, jsh 1:17');
   assert.equal(page.content, undefined);
-  assert.deepEqual(page.embeds.map((e) => [e.author.name, e.title]), [
+  assert.deepEqual(page.embeds.map((e) => [e.author?.name, e.title]), [
     ['Doctrine and Covenants', 'D&C 4:2'],
     ['Book of Mormon', 'Moroni 10:4'],
     ['Pearl of Great Price', 'Joseph Smith—History 1:17'],

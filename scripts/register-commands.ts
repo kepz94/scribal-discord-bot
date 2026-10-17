@@ -16,7 +16,8 @@ const ENV_NAMES = ['DISCORD_APPLICATION_ID', 'DISCORD_GUILD_ID', 'DISCORD_BOT_TO
 type Option = { type: number; name: string; description: string; required: boolean; max_length?: number };
 type Command = { type: number; name: string; description: string; options: Option[] };
 
-// The M1 set. Autocomplete flags arrive in SBD-11 and /search in SBD-10. Descriptions approved 2026-10-17.
+// The M1 set plus /help (v1.1, SBD-12). Autocomplete flags arrive in SBD-11 and /search in SBD-10.
+// Descriptions approved 2026-10-17.
 export const COMMANDS: Command[] = [
   {
     type: CHAT_INPUT,
@@ -35,6 +36,12 @@ export const COMMANDS: Command[] = [
     name: 'define',
     description: "Look up a word in Webster's 1828 dictionary",
     options: [{ type: STRING, name: 'word', description: 'One word, e.g. faith', required: true, max_length: 40 }],
+  },
+  {
+    type: CHAT_INPUT,
+    name: 'help',
+    description: 'Show all commands and how to use them',
+    options: [],
   },
 ];
 

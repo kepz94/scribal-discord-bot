@@ -1,7 +1,7 @@
 // Layout A "Card" builders for Scribal Bot for Discord v1 (SBD-4): SRD §6 "Reply layout" + approved mockup v4.
 //   author  volume; sermon: "Sermons of the Prophet Joseph Smith · Kirtland Era 1:1"
 //   title   stored reference ("Alma 32:21–23"); sermon: its date label ("Nov., 1831" / "Sermon 8")
-//   body    one paragraph per verse, a blank line between (decision 2026-10-16);
+//   body    one paragraph per verse, a line break between (v1.1, decision 2026-10-17; was a blank line);
 //           "**N** text" when the card shows more than one verse, the text alone when it shows one
 //   footer  only when needed: "<Book ch> · page n of N" when a chapter or range pages;
 //           sermon "Source: <citation>", plus " · page n of N" when it pages (decision 2026-10-16)
@@ -10,10 +10,10 @@ import { escapeMarkdown } from './markdown.ts';
 import { formatRef, type Ref, type RefError } from './reference.ts';
 
 export const CARD_COLOR = 0x8b5cf6; // Scribal violet
-export const PARAGRAPH_GAP = '\n\n';
+export const PARAGRAPH_GAP = '\n';
 export const WEBSTER_AUTHOR = "Webster's 1828 Dictionary";
 
-export type Embed = { author: { name: string }; title: string; description: string; footer?: { text: string }; color: number };
+export type Embed = { author?: { name: string }; title: string; description: string; footer?: { text: string }; color: number };
 
 // Position of a card's page when one chapter, range or definition pages across messages (1-based).
 export type PagePosition = { n: number; of: number };

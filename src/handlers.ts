@@ -3,11 +3,13 @@
 //             a reference error → its errorText; a list too long for one message → refused, nothing posts
 //   /chapter  resolveChapter → chapterPages → public page 1 (state "chapter")
 //   /define   word trimmed and lowercased → loadWebster → definePages (state "define"), or the no-entry text
+//   /help     the commands card, public (v1.1, SBD-12)
 //   button    decode custom_id → rebuild that page → edit the message in place; a "list" page re-reads the reading
 //             list from the message itself (decision 19). A button that no longer leads anywhere gets STALE.
 // Errors go only to the person who ran the command or pressed the button (decision 7). Anything unexpected throws,
 // and api/interactions.ts answers "Something went wrong" and logs it.
 import { escapeMarkdown } from './markdown.ts';
+import { HELP_CARD } from './help.ts';
 import { errorText } from './cards.ts';
 import { loadIndex, loadWebster } from './library.ts';
 import { chapterPages, definePages, versePages, type Page } from './paginate.ts';
@@ -69,6 +71,8 @@ function command(interaction: Interaction): InteractionResponse {
       if (entry === undefined) return ephemeral(noEntry(typed));
       return reply(definePages(word, entry)[0], { state: { t: 'define', w: word, page: 0 } });
     }
+    case 'help':
+      return reply({ embeds: [HELP_CARD], index: 0, count: 1 });
     default:
       return ephemeral(NOT_BUILT);
   }

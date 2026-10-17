@@ -47,19 +47,25 @@ test('2: /verse d&c 4:2, moroni 10:4, jsh 1:17 → 3 cards in order, no buttons'
   assert.equal(r.data.content, undefined);
 });
 
-test('3: the 12-reference list → reading list + 10 cards; Next → 2 cards; Prev returns', () => {
+test('3: the 12-reference list → reading list on every page; Next walks all 12 in order; Prev returns (v1.1)', () => {
   const first = run('verse', MOCKUP_12);
   isPublic(first);
-  assert.match(first.data.content ?? '', /^\*\*Reading list\*\* · 12 references · page 1 of 2\n/);
-  assert.equal(titles(first).length, 10);
-  const second = press(first, /Next/);
-  assert.equal(second.type, 7);
-  assert.match(second.data.content ?? '', /^\*\*Reading list\*\* · 12 references · page 2 of 2\n/);
-  assert.deepEqual(titles(second), ['Alma 32:25', 'Alma 32:26']);
-  assert.equal(buttons(second)[1].disabled, true);
-  const back = press(second, /Prev/);
-  assert.deepEqual(back.data, { ...first.data, components: first.data.components });
-  assert.deepEqual(titles(back), titles(first));
+  const count = Number(/^\*\*Reading list\*\* · 12 references · page 1 of (\d+)\n/.exec(first.data.content ?? '')?.[1]);
+  assert.ok(count >= 2);
+  assert.ok(titles(first).length < 10, 'the page size, not the 10-card cap, decides the split');
+  const seen = [...titles(first)];
+  let r = first;
+  for (let page = 2; page <= count; page++) {
+    const prev = r;
+    r = press(r, /Next/);
+    assert.equal(r.type, 7);
+    assert.match(r.data.content ?? '', new RegExp(`^\\*\\*Reading list\\*\\* · 12 references · page ${page} of ${count}\\n`));
+    seen.push(...titles(r));
+    const back = press(r, /Prev/);
+    assert.deepEqual(titles(back), titles(prev));
+  }
+  assert.equal(buttons(r)[1].disabled, true);
+  assert.deepEqual(seen, ['D&C 4:2', 'Moroni 10:4', 'Joseph Smith—History 1:17', ...Array.from({ length: 9 }, (_, i) => `Alma 32:${18 + i}`)]);
 });
 
 test('4: /verse alma 32:1-43 pages like /chapter and never leaves Alma 32', () => {
@@ -107,7 +113,7 @@ test('8: crossChapter and noVerse give their exact texts, only to the sender', (
 test('9: /define faith → Webster entry; /define zzz → the no-entry text', () => {
   const r = run('define', 'faith');
   isPublic(r);
-  assert.equal(r.data.embeds?.[0].author.name, "Webster's 1828 Dictionary");
+  assert.equal(r.data.embeds?.[0].author?.name, "Webster's 1828 Dictionary");
   assert.equal(r.data.embeds?.[0].title, 'faith');
   isEphemeral(run('define', 'zzz'), 'No entry for “zzz” in Webster\'s 1828.');
 });
@@ -144,6 +150,14 @@ test('a list too long for one message is refused before posting', () => {
 test('a missing option reads as empty input → malformed', () => {
   assert.equal(run('verse').data.flags, 64);
   assert.match(run('verse').data.content ?? '', /^Couldn't read “” as a reference\./);
+});
+
+test('/help → one public card "Scribal Bot — commands", no buttons (v1.1)', () => {
+  const r = run('help');
+  isPublic(r);
+  assert.deepEqual(titles(r), ['Scribal Bot — commands']);
+  assert.equal(r.data.components, undefined);
+  assert.equal(r.data.embeds?.[0].author, undefined);
 });
 
 test('an unknown command → "Not built yet." (M2 commands arrive later)', () => {

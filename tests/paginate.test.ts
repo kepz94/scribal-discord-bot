@@ -1,11 +1,12 @@
-// SBD-4 (v1): paging under LIMITS — whole verses, page footers, reading list, tooLong, and whole-library sweeps.
+// SBD-4 (v1), SBD-12 (v1.1): paging under LIMITS and the 1,500-character page — whole verses, page footers, reading
+// list, tooLong, and whole-library sweeps.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LIMITS } from '../src/limits.ts';
 import { loadBook, loadIndex, loadWebster } from '../src/library.ts';
 import { escapeMarkdown } from '../src/markdown.ts';
-import { chapterPages, definePages, versePages, type Page } from '../src/paginate.ts';
+import { PAGE_TEXT, chapterPages, definePages, versePages, type Page } from '../src/paginate.ts';
 import { websterUnits } from '../src/cards.ts';
 import { writeReadingList } from '../src/readingList.ts';
 import { resolveList, type Ref } from '../src/reference.ts';
@@ -21,7 +22,7 @@ const pagesOf = (input: string): Page[] => {
   return r.pages;
 };
 const embedChars = (e: Page['embeds'][number]): number =>
-  e.author.name.length + e.title.length + e.description.length + (e.footer?.text.length ?? 0);
+  (e.author?.name.length ?? 0) + e.title.length + e.description.length + (e.footer?.text.length ?? 0);
 
 function assertUnderLimits(pages: Page[], label: string): void {
   pages.forEach((p, i) => {
@@ -35,14 +36,21 @@ function assertUnderLimits(pages: Page[], label: string): void {
       assert.ok(e.description.length <= LIMITS.embedDescription, `${label} p${i} description ${e.description.length}`);
       assert.ok((e.footer?.text.length ?? 0) <= LIMITS.embedFooter, `${label} p${i} footer`);
     }
+    // v1.1 page size: card text per page ≤ PAGE_TEXT, except a page holding one verse or paragraph that is longer
+    // on its own (never split).
+    const text = p.embeds.reduce((n, e) => n + e.description.length, 0);
+    if (text > PAGE_TEXT) {
+      assert.equal(p.embeds.length, 1, `${label} p${i} ${text} chars over PAGE_TEXT in several cards`);
+      assert.ok(!p.embeds[0].description.includes('\n'), `${label} p${i} ${text} chars over PAGE_TEXT in several paragraphs`);
+    }
   });
 }
-const paragraphs = (pages: Page[]): string[] => pages.flatMap((p) => p.embeds.flatMap((e) => e.description.split('\n\n')));
+const paragraphs = (pages: Page[]): string[] => pages.flatMap((p) => p.embeds.flatMap((e) => e.description.split('\n')));
 // Every verse appears once, whole and in order; a card showing one verse has its text alone, otherwise "**N** text".
 function assertVersesWhole(pages: Page[], verses: { v: number; t: string }[], label: string): void {
   let next = 0;
   for (const card of pages.flatMap((p) => p.embeds)) {
-    const paras = card.description.split('\n\n');
+    const paras = card.description.split('\n');
     if (paras.length === 1) assert.equal(paras[0], escapeMarkdown(verses[next].t), `${label} v${next + 1}`);
     else paras.forEach((para, i) => assert.equal(para, `**${verses[next + i].v}** ${escapeMarkdown(verses[next + i].t)}`, label));
     next += paras.length;
@@ -59,28 +67,27 @@ test('Alma 32:21 → 1 page, count 1, no content', () => {
   assert.equal(pages[0].embeds[0].title, 'Alma 32:21');
 });
 
-test('1 Nephi 3 → at least 2 pages, verses whole and in order, verse-span titles, page footers', () => {
+test('1 Nephi 3 → 5 pages of ≤ 1,500 characters, verses whole and in order, verse-span titles, page footers', () => {
   const pages = chapterPages('1nephi', 3);
-  assert.ok(pages.length >= 2);
+  assert.equal(pages.length, 5);
   assertUnderLimits(pages, '1 Nephi 3');
-  const verses = loadBook('1nephi').chapters[2].verses;
-  assert.deepEqual(paragraphs(pages), verses.map((v) => `**${v.v}** ${escapeMarkdown(v.t)}`));
+  assertVersesWhole(pages, loadBook('1nephi').chapters[2].verses, '1 Nephi 3');
   let next = 1;
   pages.forEach((p, i) => {
     const [card] = p.embeds;
-    const shown = card.description.split('\n\n').length;
-    assert.equal(card.title, `1 Nephi 3:${next}–${next + shown - 1}`);
+    const shown = card.description.split('\n').length;
+    assert.equal(card.title, shown === 1 ? `1 Nephi 3:${next}` : `1 Nephi 3:${next}–${next + shown - 1}`);
     assert.deepEqual(card.footer, { text: `1 Nephi 3 · page ${i + 1} of ${pages.length}` });
-    assert.equal(card.author.name, 'Book of Mormon');
+    assert.equal(card.author?.name, 'Book of Mormon');
     assert.equal(p.content, undefined);
     next += shown;
   });
 });
 
 test('a one-page chapter has no footer and a verse-span title', () => {
-  const pages = chapterPages('obadiah', 1);
+  const pages = chapterPages('psalms', 117);
   assert.equal(pages.length, 1);
-  assert.equal(pages[0].embeds[0].title, 'Obadiah 1:1–21');
+  assert.equal(pages[0].embeds[0].title, 'Psalms 117:1–2');
   assert.equal(pages[0].embeds[0].footer, undefined);
 });
 
@@ -97,7 +104,7 @@ test('a paged sermon chapter: date title, author names the page span, footer "So
   pages.forEach((p, i) => {
     const [card] = p.embeds;
     assert.equal(card.title, 'January 22, 1834');
-    assert.match(card.author.name, /^Sermons of the Prophet Joseph Smith · Kirtland Era 20:\d+(–\d+)?$/);
+    assert.match(card.author?.name ?? '', /^Sermons of the Prophet Joseph Smith · Kirtland Era 20:\d+(–\d+)?$/);
     assert.deepEqual(card.footer, { text: `Source: DHC 2:4-24 · page ${i + 1} of ${pages.length}` });
   });
 });
@@ -113,14 +120,27 @@ test('a long single range pages like a chapter, footer "Alma 32 · page n of N",
   assert.equal(paragraphs(pages).length, 43);
 });
 
-test('the 12-reference mockup list → one message paged 10 + 2, reading list on both pages', () => {
+test('the 12-reference mockup list → one message, every card in order, reading list on every page (v1.1 page size)', () => {
   const list = refs(MOCKUP_12);
   assert.equal(list.length, 12);
   const pages = pagesOf(MOCKUP_12);
-  assert.deepEqual(pages.map((p) => p.embeds.length), [10, 2]);
+  // The page size, not the 10-card cap, decides the split (v1 was 10 + 2).
+  assert.ok(pages[0].embeds.length < LIMITS.embedsPerMessage);
   assertUnderLimits(pages, 'mockup list');
-  pages.forEach((p, i) => assert.equal(p.content, writeReadingList(list, i, 2)));
-  assert.equal(pages[1].embeds[1].title, 'Alma 32:26');
+  pages.forEach((p, i) => assert.equal(p.content, writeReadingList(list, i, pages.length)));
+  assert.deepEqual(pages.flatMap((p) => p.embeds.map((e) => e.title)), [
+    'D&C 4:2', 'Moroni 10:4', 'Joseph Smith—History 1:17',
+    ...Array.from({ length: 9 }, (_, i) => `Alma 32:${18 + i}`),
+  ]);
+});
+
+test('list pages are packed full: the next page\'s first card would not have fit', () => {
+  const pages = pagesOf(MOCKUP_12);
+  for (let i = 0; i + 1 < pages.length; i++) {
+    const text = pages[i].embeds.reduce((n, e) => n + e.description.length, 0);
+    const full = pages[i].embeds.length === LIMITS.embedsPerMessage;
+    assert.ok(full || text + pages[i + 1].embeds[0].description.length > PAGE_TEXT, `page ${i + 1} had room`);
+  }
 });
 
 test('a long range inside a list continues in consecutive cards; nothing is dropped', () => {
@@ -172,7 +192,7 @@ test('/define faith → Webster card: header paragraph, then numbered senses in 
   const pages = definePages('faith', entry);
   assertUnderLimits(pages, 'faith');
   const [card] = pages[0].embeds;
-  assert.equal(card.author.name, "Webster's 1828 Dictionary");
+  assert.equal(card.author?.name, "Webster's 1828 Dictionary");
   assert.equal(card.title, 'faith');
   const paras = paragraphs(pages);
   assert.ok(paras[0].startsWith('FAITH, noun [Latin fides'));
@@ -206,8 +226,8 @@ test('a dictionary sense (or header) that fits one page is never split across pa
   for (const [word, entry] of Object.entries(webster)) {
     const pages = definePages(word, entry);
     for (const unit of websterUnits(entry)) {
-      const text = unit.join('\n\n');
-      if (text.length > LIMITS.embedDescription) continue;
+      const text = unit.join('\n');
+      if (text.length > PAGE_TEXT) continue;
       assert.ok(pages.some((p) => p.embeds[0].description.includes(text)), `${word}: ${text.slice(0, 40)}`);
       checked++;
     }
