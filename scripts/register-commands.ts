@@ -13,11 +13,24 @@ const CHAT_INPUT = 1;
 const STRING = 3;
 const ENV_NAMES = ['DISCORD_APPLICATION_ID', 'DISCORD_GUILD_ID', 'DISCORD_BOT_TOKEN'] as const;
 
-type Option = { type: number; name: string; description: string; required: boolean; max_length?: number };
+type Option = { type: number; name: string; description: string; required: boolean; max_length?: number; choices?: { name: string; value: string }[] };
 type Command = { type: number; name: string; description: string; options: Option[] };
 
-// The M1 set plus /help (v1.1, SBD-12). Autocomplete flags arrive in SBD-11 and /search in SBD-10.
+// The M1 set, /help (v1.1, SBD-12) and /search (M2, SBD-10). Autocomplete flags arrive in SBD-11.
 // Descriptions approved 2026-10-17.
+
+// The 8 volumes in canonical order. Written out because this script runs in the workflow without data/gen;
+// tests/registerCommands.test.ts checks it equals the library's volume list.
+const VOLUMES = [
+  'Old Testament',
+  'New Testament',
+  'Book of Mormon',
+  'Doctrine and Covenants',
+  'Pearl of Great Price',
+  'OT JST',
+  'NT JST',
+  'Sermons of the Prophet Joseph Smith',
+];
 export const COMMANDS: Command[] = [
   {
     type: CHAT_INPUT,
@@ -42,6 +55,21 @@ export const COMMANDS: Command[] = [
     name: 'help',
     description: 'Show all commands and how to use them',
     options: [],
+  },
+  {
+    type: CHAT_INPUT,
+    name: 'search',
+    description: 'Search the scriptures for words or a phrase',
+    options: [
+      { type: STRING, name: 'query', description: 'e.g. faith & works, mercy OR grace, merc*', required: true, max_length: 80 },
+      {
+        type: STRING,
+        name: 'volume',
+        description: 'Only search one volume',
+        required: false,
+        choices: VOLUMES.map((v) => ({ name: v, value: v })),
+      },
+    ],
   },
 ];
 

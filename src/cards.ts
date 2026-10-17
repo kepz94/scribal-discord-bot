@@ -8,6 +8,8 @@
 import { loadBook, loadIndex, type BookKey, type IndexBook } from './library.ts';
 import { escapeMarkdown } from './markdown.ts';
 import { formatRef, type Ref, type RefError } from './reference.ts';
+import { highlighter, snippet, type SearchResult } from './search.ts';
+import type { Page } from './paginate.ts';
 
 export const CARD_COLOR = 0x8b5cf6; // Scribal violet
 export const PARAGRAPH_GAP = '\n';
@@ -100,4 +102,47 @@ export function errorText(e: RefError): string {
       break;
   }
   return escapeMarkdown(e.message);
+}
+
+// /search cards (SBD-10, mockup v4 /search): 5 results per page; title "N verses match “q”"; author "Search · whole
+// words · all volumes" (or the volume); each hit is its reference in bold, then its snippet with every match in bold;
+// footer "Results a–b of N · <volume count> · …" ("Sermons" for the sermons volume, as in the mockup).
+export const SEARCH_PER_PAGE = 5;
+
+const shortVolume = (v: string): string => (v === 'Sermons of the Prophet Joseph Smith' ? 'Sermons' : v);
+
+// Escape a snippet for Discord and bold each match (empty matches are left alone).
+function highlightSnippet(text: string, terms: string[]): string {
+  const re = highlighter(terms);
+  if (!re) return escapeMarkdown(text);
+  return text
+    .split(re)
+    .map((part, i) => (i % 2 === 1 && part !== '' ? `**${escapeMarkdown(part)}**` : escapeMarkdown(part)))
+    .join('');
+}
+
+// Page `index` (from 0) of a search, or null when there is no such page. Builds only that page: a broad query
+// ("the": 59,020 hits) has thousands.
+export function searchPage(result: SearchResult, query: string, volume: string | undefined, index: number): Page | null {
+  const { total } = result;
+  const count = Math.ceil(total / SEARCH_PER_PAGE);
+  if (!Number.isSafeInteger(index) || index < 0 || index >= count) return null;
+  const hits = result.hits.slice(index * SEARCH_PER_PAGE, (index + 1) * SEARCH_PER_PAGE);
+  const from = index * SEARCH_PER_PAGE + 1;
+  const to = from + hits.length - 1;
+  const range = from === to ? `Result ${from}` : `Results ${from}–${to}`;
+  const counts = Object.entries(result.perVolume).map(([v, n]) => `${shortVolume(v)} ${n}`).join(' · ');
+  const embed: Embed = {
+    author: { name: `Search · whole words · ${volume ?? 'all volumes'}` },
+    title: `${total} verse${total === 1 ? '' : 's'} match${total === 1 ? 'es' : ''} “${query}”`,
+    description: hits.map((h) => `**${h.ref}**\n${highlightSnippet(snippet(h.t, result.terms), result.terms)}`).join(PARAGRAPH_GAP),
+    footer: { text: `${range} of ${total} · ${counts}` },
+    color: CARD_COLOR,
+  };
+  return { embeds: [embed], index, count };
+}
+
+// Every page of a search.
+export function searchPages(result: SearchResult, query: string, volume?: string): Page[] {
+  return Array.from({ length: Math.ceil(result.total / SEARCH_PER_PAGE) }, (_, i) => searchPage(result, query, volume, i) as Page);
 }

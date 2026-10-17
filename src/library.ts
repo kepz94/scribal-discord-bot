@@ -77,9 +77,14 @@ export function loadWebster(word: string): string | undefined {
   return Object.hasOwn(entries, word) ? entries[word] : undefined;
 }
 
+// The volume names in canonical order (position = search file index).
+export function loadVolumes(): string[] {
+  return [...new Set(loadIndex().map((b) => b.volume))];
+}
+
 // Search rows for one volume (by name), or for every volume in canonical order. An unknown volume throws.
 export function loadSearchCorpus(volume?: string): SearchRow[] {
-  const volumes = [...new Set(loadIndex().map((b) => b.volume))];
+  const volumes = loadVolumes();
   if (volume === undefined) return volumes.flatMap((_, i) => searchPart(i));
   const i = volumes.indexOf(volume);
   if (i < 0) throw new Error(`Unknown volume: ${volume}`);

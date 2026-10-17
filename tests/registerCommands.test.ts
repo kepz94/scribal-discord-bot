@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { COMMANDS, register } from '../scripts/register-commands.ts';
+import { loadVolumes } from '../src/library.ts';
 
 const ENV = { DISCORD_APPLICATION_ID: '111122223333', DISCORD_GUILD_ID: '444455556666', DISCORD_BOT_TOKEN: 'tok.en.SECRET' };
 // Discord: "CHAT_INPUT command names and command option names must match ^[-_ʼ\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$"
@@ -19,7 +20,7 @@ function fakeFetch(status: number, body: unknown, calls: Call[]): typeof fetch {
 }
 const echo = (init: RequestInit): { name: string }[] => JSON.parse(String(init.body)) as { name: string }[];
 
-test('the set is /verse, /chapter, /define (one required string option each) and /help (none, v1.1)', () => {
+test('the set is /verse, /chapter, /define, /help (v1.1) and /search (M2)', () => {
   assert.deepEqual(
     COMMANDS.map((c) => [c.type, c.name, c.options.map((o) => [o.type, o.name, o.required])]),
     [
@@ -27,8 +28,16 @@ test('the set is /verse, /chapter, /define (one required string option each) and
       [1, 'chapter', [[3, 'reference', true]]],
       [1, 'define', [[3, 'word', true]]],
       [1, 'help', []],
+      [1, 'search', [[3, 'query', true], [3, 'volume', false]]],
     ],
   );
+});
+
+test('/search query has max_length 80; volume offers exactly the 8 volumes, in canonical order', () => {
+  const [query, volume] = COMMANDS[4].options;
+  assert.equal(query.max_length, 80);
+  assert.deepEqual(volume.choices, loadVolumes().map((v) => ({ name: v, value: v })));
+  assert.equal(volume.choices?.length, 8);
 });
 
 test('/define word has max_length 40; no option has autocomplete yet (SBD-11)', () => {
@@ -52,7 +61,9 @@ test('the descriptions are the approved wording', () => {
     ['Read a whole chapter', 'e.g. 1 Nephi 3 or Kirtland Era 20'],
     ["Look up a word in Webster's 1828 dictionary", 'One word, e.g. faith'],
     ['Show all commands and how to use them', undefined],
+    ['Search the scriptures for words or a phrase', 'e.g. faith & works, mercy OR grace, merc*'],
   ]);
+  assert.equal(COMMANDS[4].options[1].description, 'Only search one volume');
 });
 
 test('register PUTs the whole set to the guild endpoint with the bot token and Discord\'s User-Agent', async () => {
@@ -67,7 +78,7 @@ test('register PUTs the whole set to the guild endpoint with the bot token and D
   assert.match(headers.get('user-agent') ?? '', /^DiscordBot \(https:\/\/github\.com\/kepz94\/scribal-discord-bot, 1\.0\.0\)$/);
   assert.deepEqual(echo(calls[0].init), JSON.parse(JSON.stringify(COMMANDS)));
   assert.equal(result.ok, true);
-  assert.deepEqual(result.lines, ['Discord answered 200', 'Registered: /verse, /chapter, /define, /help']);
+  assert.deepEqual(result.lines, ['Discord answered 200', 'Registered: /verse, /chapter, /define, /help, /search']);
 });
 
 test('printed lines never carry the token or an ID', async () => {
@@ -91,7 +102,7 @@ test('an error answer fails with Discord\'s message and code', async () => {
 test('a 200 whose command names differ from the set fails', async () => {
   const result = await register(ENV, fakeFetch(200, [{ name: 'verse' }], []));
   assert.equal(result.ok, false);
-  assert.equal(result.lines.at(-1), 'Registered: /verse — expected /verse, /chapter, /define, /help');
+  assert.equal(result.lines.at(-1), 'Registered: /verse — expected /verse, /chapter, /define, /help, /search');
 });
 
 test('a missing secret fails before any request, naming the variable only', async () => {

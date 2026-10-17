@@ -4,14 +4,17 @@
 //   /chapter  resolveChapter → chapterPages → public page 1 (state "chapter")
 //   /define   word trimmed and lowercased → loadWebster → definePages (state "define"), or the no-entry text
 //   /help     the commands card, public (v1.1, SBD-12)
+//   /search   search(query, volume) → searchPages (state "search", vol = volume index); nothing to search for →
+//             "Type at least one word to search for."; no hits → "No verses match “q”." (SBD-10)
 //   button    decode custom_id → rebuild that page → edit the message in place; a "list" page re-reads the reading
 //             list from the message itself (decision 19). A button that no longer leads anywhere gets STALE.
 // Errors go only to the person who ran the command or pressed the button (decision 7). Anything unexpected throws,
 // and api/interactions.ts answers "Something went wrong" and logs it.
 import { escapeMarkdown } from './markdown.ts';
 import { HELP_CARD } from './help.ts';
-import { errorText } from './cards.ts';
-import { loadIndex, loadWebster } from './library.ts';
+import { errorText, searchPage } from './cards.ts';
+import { loadIndex, loadVolumes, loadWebster } from './library.ts';
+import { search } from './search.ts';
 import { chapterPages, definePages, versePages, type Page } from './paginate.ts';
 import { decode, type PageState } from './pageState.ts';
 import { readReadingList } from './readingList.ts';
@@ -36,6 +39,8 @@ const MESSAGE_COMPONENT = 3;
 export const TOO_LONG = 'That list is too long for one message. Split it into two commands.';
 export const STALE = "That page isn't available any more. Run the command again.";
 export const NOT_BUILT = 'Not built yet.';
+export const NOTHING_TO_SEARCH = 'Type at least one word to search for.';
+const noMatches = (query: string): string => `No verses match “${escapeMarkdown(query)}”.`;
 const noEntry = (word: string): string => `No entry for “${escapeMarkdown(word)}” in Webster's 1828.`;
 
 export function handle(interaction: Interaction): InteractionResponse {
@@ -73,13 +78,33 @@ function command(interaction: Interaction): InteractionResponse {
     }
     case 'help':
       return reply({ embeds: [HELP_CARD], index: 0, count: 1 });
+    case 'search': {
+      const query = optionText(interaction, 'query').trim();
+      const volume = optionText(interaction, 'volume') || undefined;
+      const result = search(query, volume);
+      if (result === null) return ephemeral(NOTHING_TO_SEARCH);
+      if (result.total === 0) return ephemeral(noMatches(query));
+      const vol = volume === undefined ? undefined : loadVolumes().indexOf(volume);
+      const state: PageState = vol === undefined ? { t: 'search', q: query, page: 0 } : { t: 'search', q: query, vol, page: 0 };
+      return reply(searchPage(result, query, volume, 0) as Page, { state });
+    }
     default:
       return ephemeral(NOT_BUILT);
   }
 }
 
+// The page a decoded button state points to, or null when it no longer exists. A search builds only that page
+// (SBD-10); every other kind builds its page list.
+function pageFor(state: PageState, messageContent: string): Page | null {
+  if (state.t !== 'search') return pagesFor(state, messageContent)?.[state.page] ?? null;
+  const volume = state.vol === undefined ? undefined : loadVolumes()[state.vol];
+  if (state.vol !== undefined && volume === undefined) return null;
+  const result = search(state.q, volume);
+  return result ? searchPage(result, state.q, volume, state.page) : null;
+}
+
 // The pages a decoded button state points into, or null when they no longer exist.
-function pagesFor(state: PageState, messageContent: string): Page[] | null {
+function pagesFor(state: Exclude<PageState, { t: 'search' }>, messageContent: string): Page[] | null {
   switch (state.t) {
     case 'chapter': {
       const book = loadIndex().find((b) => b.key === state.key);
@@ -98,8 +123,6 @@ function pagesFor(state: PageState, messageContent: string): Page[] | null {
       const entry = loadWebster(state.w);
       return entry === undefined ? null : definePages(state.w, entry);
     }
-    case 'search':
-      return null; // /search arrives in M2 (SBD-10)
   }
 }
 
@@ -117,6 +140,6 @@ function pagesOf(refs: Ref[]): Page[] | null {
 function component(interaction: Interaction): InteractionResponse {
   const state = decode(interaction.data?.custom_id ?? '');
   if (state === null) return ephemeral(STALE);
-  const page = pagesFor(state, interaction.message?.content ?? '')?.[state.page];
+  const page = pageFor(state, interaction.message?.content ?? '');
   return page ? update(page, { state }) : ephemeral(STALE);
 }

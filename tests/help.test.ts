@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { loadIndex, loadWebster } from '../src/library.ts';
 import { HELP_CARD, HELP_EXAMPLES } from '../src/help.ts';
 import { resolveChapter, resolveList } from '../src/reference.ts';
+import { search } from '../src/search.ts';
 
 test('the card is titled "Scribal Bot — commands", violet, with no author line', () => {
   assert.equal(HELP_CARD.title, 'Scribal Bot — commands');
@@ -24,6 +25,13 @@ test('the card text is the approved wording', () => {
       '',
       '**/chapter** `reference` — read a whole chapter: `1 nephi 3`',
       '',
+      '**/search** `query` — find verses',
+      '• A phrase: `my beloved son`',
+      '• Both words: `faith & works`',
+      '• Either word: `mercy OR grace`',
+      '• Word starts: `merc*`',
+      '• Pick `volume` to search one volume',
+      '',
       "**/define** `word` — Webster's 1828 dictionary: `faith`",
       '',
       '**Tips**',
@@ -36,8 +44,8 @@ test('the card text is the approved wording', () => {
 });
 
 test('every example shown in backticks is one of HELP_EXAMPLES', () => {
-  const shown = [...(HELP_CARD.description.matchAll(/`([^`]+)`/g))].map((m) => m[1]).filter((s) => s !== 'reference' && s !== 'word');
-  const listed = [...HELP_EXAMPLES.verse, ...HELP_EXAMPLES.chapter, ...HELP_EXAMPLES.define, ...HELP_EXAMPLES.aliases, ...HELP_EXAMPLES.books];
+  const shown = [...(HELP_CARD.description.matchAll(/`([^`]+)`/g))].map((m) => m[1]).filter((s) => !['reference', 'word', 'query', 'volume'].includes(s));
+  const listed = [...HELP_EXAMPLES.verse, ...HELP_EXAMPLES.chapter, ...HELP_EXAMPLES.search, ...HELP_EXAMPLES.define, ...HELP_EXAMPLES.aliases, ...HELP_EXAMPLES.books];
   assert.deepEqual([...shown].sort(), [...listed].sort());
 });
 
@@ -46,6 +54,9 @@ test('every /verse example resolves', () => {
 });
 test('every /chapter example resolves', () => {
   for (const input of HELP_EXAMPLES.chapter) assert.ok(resolveChapter(input).ok, input);
+});
+test('every /search example finds verses', () => {
+  for (const q of HELP_EXAMPLES.search) assert.ok((search(q)?.total ?? 0) > 0, q);
 });
 test('every /define example has an entry', () => {
   for (const word of HELP_EXAMPLES.define) assert.ok(loadWebster(word), word);

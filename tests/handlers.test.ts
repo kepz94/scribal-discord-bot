@@ -8,9 +8,13 @@ import { handle, type Interaction, type InteractionResponse } from '../src/handl
 const STALE = "That page isn't available any more. Run the command again.";
 const MOCKUP_12 = 'd&c 4:2, moroni 10:4, jsh 1:17, ' + Array.from({ length: 9 }, (_, i) => `alma 32:${18 + i}`).join(', ');
 
-const command = (name: string, value?: string, option = name === 'define' ? 'word' : 'reference'): Interaction => ({
+const command = (name: string, value?: string, option = name === 'define' ? 'word' : name === 'search' ? 'query' : 'reference'): Interaction => ({
   type: 2,
   data: { name, options: value === undefined ? [] : [{ name: option, type: 3, value }] },
+});
+const searchCommand = (query: string, volume?: string): Interaction => ({
+  type: 2,
+  data: { name: 'search', options: [{ name: 'query', type: 3, value: query }, ...(volume ? [{ name: 'volume', type: 3, value: volume }] : [])] },
 });
 const run = (name: string, value?: string): InteractionResponse => handle(command(name, value));
 const titles = (r: InteractionResponse): string[] => (r.data.embeds ?? []).map((e) => e.title);
@@ -160,8 +164,53 @@ test('/help → one public card "Scribal Bot — commands", no buttons (v1.1)', 
   assert.equal(r.data.embeds?.[0].author, undefined);
 });
 
-test('an unknown command → "Not built yet." (M2 commands arrive later)', () => {
-  isEphemeral(run('search', 'faith'), 'Not built yet.');
+test('an unknown command → "Not built yet."', () => {
+  isEphemeral(run('random', 'x'), 'Not built yet.');
+});
+
+// /search (SBD-10)
+test('/search faith & works → public "52 verses match", results 1–5; More walks all 52 and stops', () => {
+  let r = handle(searchCommand('faith & works'));
+  isPublic(r);
+  assert.deepEqual(titles(r), ['52 verses match “faith & works”']);
+  assert.match(r.data.embeds?.[0].footer?.text ?? '', /^Results 1–5 of 52 · /);
+  assert.equal(buttons(r)[1].label, 'More ▶');
+  const refs: string[] = [];
+  const collect = (x: InteractionResponse) => refs.push(...[...(x.data.embeds?.[0].description ?? '').matchAll(/^\*\*(.+)\*\*$/gm)].map((m) => m[1]));
+  collect(r);
+  while (!buttons(r)[1].disabled) {
+    r = press(r, /More/);
+    assert.equal(r.type, 7);
+    collect(r);
+  }
+  assert.equal(refs.length, 52);
+  assert.equal(new Set(refs).size, 52);
+  assert.match(r.data.embeds?.[0].footer?.text ?? '', /^Results 51–52 of 52 · /);
+});
+
+test('/search with volume Book of Mormon → 9', () => {
+  const r = handle(searchCommand('faith & works', 'Book of Mormon'));
+  isPublic(r);
+  assert.deepEqual(titles(r), ['9 verses match “faith & works”']);
+  assert.equal(r.data.embeds?.[0].author?.name, 'Search · whole words · Book of Mormon');
+  const more = press(r, /More/);
+  assert.match(more.data.embeds?.[0].footer?.text ?? '', /^Results 6–9 of 9 · Book of Mormon 9$/);
+});
+
+test('/search with 0 matches → ephemeral "No verses match “q”." (escaped)', () => {
+  isEphemeral(handle(searchCommand('zzzqqq')), 'No verses match “zzzqqq”.');
+  isEphemeral(handle(searchCommand('zz_qq')), 'No verses match “zz\\_qq”.');
+});
+
+test('/search with nothing to search for → ephemeral "Type at least one word to search for."', () => {
+  isEphemeral(handle(searchCommand('   ')), 'Type at least one word to search for.');
+  isEphemeral(handle(searchCommand('&')), 'Type at least one word to search for.');
+});
+
+test('/search with one hit → no buttons', () => {
+  const r = handle(searchCommand('impunity'));
+  assert.deepEqual(titles(r), ['1 verse matches “impunity”']);
+  assert.equal(r.data.components, undefined);
 });
 
 // Stale or unreadable buttons
@@ -182,5 +231,19 @@ test('a list page past the end → stale', () => {
   isEphemeral(pressId('l:5', first.data.content), STALE);
 });
 test('a define word with no entry → stale', () => isEphemeral(pressId('d:1:zzz'), STALE));
-test('a search button (M2) → stale for now', () => isEphemeral(pressId('s:1:-:faith'), STALE));
+test('a search button turns to its page', () => {
+  const r = pressId('s:1:-:faith & works');
+  assert.equal(r.type, 7);
+  assert.match(r.data.embeds?.[0].footer?.text ?? '', /^Results 6–10 of 52 · /);
+});
+test('a search button past the last page → stale', () => isEphemeral(pressId('s:11:-:faith & works'), STALE));
+test('a search button with a volume index that does not exist → stale', () => isEphemeral(pressId('s:0:8:faith'), STALE));
+test('a search button whose query now finds nothing → stale', () => isEphemeral(pressId('s:0:-:zzzqqq'), STALE));
+test('a search button with nothing to search for → stale', () => isEphemeral(pressId('s:0:-:&'), STALE));
 test('a component with no custom_id → stale', () => isEphemeral(handle({ type: 3, data: {} }), STALE));
+
+test('/search trims the query: the title and the button state hold it without the spaces', () => {
+  const r = handle(searchCommand('  faith & works  '));
+  assert.deepEqual(titles(r), ['52 verses match “faith & works”']);
+  assert.ok(buttons(r).some((b) => b.custom_id === 's:1:-:faith & works'));
+});

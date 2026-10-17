@@ -11,6 +11,10 @@ import { verify } from '../src/verify.ts';
 import { ephemeral } from '../src/respond.ts';
 import { handle, type Interaction } from '../src/handlers.ts';
 
+// Handler time per interaction, logged for SBD-10's cold/warm measurement. "cold" = the first interaction this
+// function instance has handled (data files not yet loaded).
+let handled = 0;
+
 const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 export async function POST(request: Request): Promise<Response> {
@@ -27,9 +31,14 @@ export async function POST(request: Request): Promise<Response> {
     const interaction = JSON.parse(raw) as Interaction & { data?: { name?: unknown; custom_id?: unknown } };
     type = interaction.type;
     name = interaction.data?.name ?? (typeof interaction.data?.custom_id === 'string' ? `button ${interaction.data.custom_id.charAt(0)}` : undefined);
-    console.log('interaction', { type, name });
-    if (type === 1) return json({ type: 1 });
-    return json(handle(interaction));
+    if (type === 1) {
+      console.log('interaction', { type, name });
+      return json({ type: 1 });
+    }
+    const started = performance.now();
+    const response = handle(interaction);
+    console.log('interaction', { type, name, ms: Math.round(performance.now() - started), cold: handled++ === 0 });
+    return json(response);
   } catch (err) {
     console.error('interaction failed', { type, name }, err);
     return json(ephemeral('Something went wrong. Try again.'));

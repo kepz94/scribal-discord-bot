@@ -110,3 +110,62 @@ test('errorText works for resolveChapter errors too', () => {
   assert.ok(!r.ok);
   assert.equal(errorText(r.error), '**Alma** has 63 chapters.');
 });
+
+// /search cards (SBD-10, mockup v4 /search)
+import { search } from '../src/search.ts';
+import { searchPage, searchPages } from '../src/cards.ts';
+
+const searched = (q: string, volume?: string) => {
+  const r = search(q, volume);
+  assert.ok(r && r.total > 0, q);
+  return { result: r, pages: searchPages(r, q, volume) };
+};
+
+test('searchPages: 5 results per page, count title, author, footer with per-volume counts', () => {
+  const { pages } = searched('faith & works');
+  assert.equal(pages.length, 11);
+  const [card] = pages[0].embeds;
+  assert.equal(card.title, '52 verses match “faith & works”');
+  assert.equal(card.author?.name, 'Search · whole words · all volumes');
+  assert.equal(card.footer?.text, 'Results 1–5 of 52 · New Testament 15 · Book of Mormon 9 · Doctrine and Covenants 4 · NT JST 17 · Sermons 7');
+  assert.equal(pages[10].embeds[0].footer?.text, 'Results 51–52 of 52 · New Testament 15 · Book of Mormon 9 · Doctrine and Covenants 4 · NT JST 17 · Sermons 7');
+  assert.equal(card.color, 0x8b5cf6);
+  pages.forEach((p, i) => {
+    assert.equal(p.index, i);
+    assert.equal(p.count, 11);
+    assert.ok(p.embeds[0].description.length <= 4096);
+  });
+});
+
+test('each hit is its reference in bold, then the snippet with every match in bold', () => {
+  const { result, pages } = searched('faith & works');
+  const lines = pages[0].embeds[0].description.split('\n');
+  assert.equal(lines.length, 10);
+  result.hits.slice(0, 5).forEach((h, i) => {
+    assert.equal(lines[i * 2], `**${h.ref}**`);
+    assert.match(lines[i * 2 + 1], /\*\*faith\*\*/i);
+    assert.match(lines[i * 2 + 1], /\*\*works\*\*/i);
+  });
+});
+
+test('a volume search names the volume and counts only it', () => {
+  const { pages } = searched('faith & works', 'Book of Mormon');
+  assert.equal(pages[0].embeds[0].author?.name, 'Search · whole words · Book of Mormon');
+  assert.equal(pages[1].embeds[0].footer?.text, 'Results 6–9 of 9 · Book of Mormon 9');
+});
+
+test('one hit: singular title and footer; markdown in the verse is escaped', () => {
+  const { pages } = searched('impunity');
+  assert.equal(pages.length, 1);
+  const [card] = pages[0].embeds;
+  assert.equal(card.title, '1 verse matches “impunity”');
+  assert.equal(card.footer?.text, 'Result 1 of 1 · Sermons 1');
+  assert.ok(card.description.includes('\\* \\* \\*'));
+  assert.ok(card.description.includes('**impunity**'));
+});
+
+test('searchPage builds the one page searchPages has at that index, and null past either end', () => {
+  const { result, pages } = searched('faith & works');
+  pages.forEach((p, i) => assert.deepEqual(searchPage(result, 'faith & works', undefined, i), p));
+  for (const i of [-1, 11, 1.5, Number.NaN]) assert.equal(searchPage(result, 'faith & works', undefined, i), null);
+});
