@@ -42,7 +42,17 @@ export const GEN_DIR = fileURLToPath(new URL('../data/gen/', import.meta.url));
 // Webster entries are split into one file per first letter a–z; any other first character goes to "other".
 export const websterPartition = (key: string): string => (/^[a-z]/.test(key) ? key[0] : 'other');
 
-const readJson = <T>(...parts: string[]): T => JSON.parse(readFileSync(join(GEN_DIR, ...parts), 'utf8')) as T;
+const read = new Set<string>();
+const readJson = <T>(...parts: string[]): T => {
+  const parsed = JSON.parse(readFileSync(join(GEN_DIR, ...parts), 'utf8')) as T;
+  read.add(parts.join('/'));
+  return parsed;
+};
+
+// Diagnostic (SBD-11): every data/gen file this process has read, in first-read order.
+export function filesRead(): string[] {
+  return [...read];
+}
 
 let index: IndexBook[] | undefined;
 const books = new Map<BookKey, BookFile>();

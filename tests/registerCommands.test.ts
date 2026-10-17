@@ -40,9 +40,10 @@ test('/search query has max_length 80; volume offers exactly the 8 volumes, in c
   assert.equal(volume.choices?.length, 8);
 });
 
-test('/define word has max_length 40; no option has autocomplete yet (SBD-11)', () => {
+test('/define word has max_length 40; autocomplete only on /verse and /chapter reference (SBD-11)', () => {
   assert.equal(COMMANDS[2].options[0].max_length, 40);
-  for (const c of COMMANDS) for (const o of c.options) assert.equal('autocomplete' in o, false, `${c.name} ${o.name}`);
+  const flagged = COMMANDS.flatMap((c) => c.options.filter((o) => 'autocomplete' in o).map((o) => [c.name, o.name, o.autocomplete]));
+  assert.deepEqual(flagged, [['verse', 'reference', true], ['chapter', 'reference', true]]);
 });
 
 test('names and descriptions follow Discord\'s rules', () => {

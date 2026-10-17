@@ -94,3 +94,9 @@ test('a missing DISCORD_PUBLIC_KEY → 401 and a console.error naming it', async
   assert.equal(res.status, 401);
   assert.ok(logged.some((args) => String(args[0]).includes('DISCORD_PUBLIC_KEY')));
 });
+
+test('a signed autocomplete (type 4) → type 8 with the reference suggestions (SBD-11)', async () => {
+  const body = JSON.stringify({ type: 4, data: { name: 'verse', options: [{ name: 'reference', type: 3, value: 'jsh', focused: true }] } });
+  const { result: res } = await quietly(() => withKey(PUBLIC_HEX, () => POST(request(body))));
+  assert.deepEqual(await res.json(), { type: 8, data: { choices: [{ name: 'Joseph Smith—History · Pearl of Great Price · 1 chapter', value: 'Joseph Smith—History' }] } });
+});

@@ -13,10 +13,18 @@ const CHAT_INPUT = 1;
 const STRING = 3;
 const ENV_NAMES = ['DISCORD_APPLICATION_ID', 'DISCORD_GUILD_ID', 'DISCORD_BOT_TOKEN'] as const;
 
-type Option = { type: number; name: string; description: string; required: boolean; max_length?: number; choices?: { name: string; value: string }[] };
+type Option = {
+  type: number;
+  name: string;
+  description: string;
+  required: boolean;
+  max_length?: number;
+  choices?: { name: string; value: string }[];
+  autocomplete?: boolean;
+};
 type Command = { type: number; name: string; description: string; options: Option[] };
 
-// The M1 set, /help (v1.1, SBD-12) and /search (M2, SBD-10). Autocomplete flags arrive in SBD-11.
+// The M1 set, /help (v1.1, SBD-12), /search (M2, SBD-10) and autocomplete on both reference options (M2, SBD-11).
 // Descriptions approved 2026-10-17.
 
 // The 8 volumes in canonical order. Written out because this script runs in the workflow without data/gen;
@@ -36,13 +44,13 @@ export const COMMANDS: Command[] = [
     type: CHAT_INPUT,
     name: 'verse',
     description: 'Look up verses: one, a range, or several separated by commas',
-    options: [{ type: STRING, name: 'reference', description: 'e.g. Alma 32:21, Alma 32:21-23, or D&C 4:2, Moroni 10:4', required: true }],
+    options: [{ type: STRING, name: 'reference', description: 'e.g. Alma 32:21, Alma 32:21-23, or D&C 4:2, Moroni 10:4', required: true, autocomplete: true }],
   },
   {
     type: CHAT_INPUT,
     name: 'chapter',
     description: 'Read a whole chapter',
-    options: [{ type: STRING, name: 'reference', description: 'e.g. 1 Nephi 3 or Kirtland Era 20', required: true }],
+    options: [{ type: STRING, name: 'reference', description: 'e.g. 1 Nephi 3 or Kirtland Era 20', required: true, autocomplete: true }],
   },
   {
     type: CHAT_INPUT,

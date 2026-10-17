@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { LIMITS } from '../src/limits.ts';
-import { loadBook, loadIndex, loadSearchCorpus, loadWebster, type IndexBook } from '../src/library.ts';
+import { filesRead, loadBook, loadIndex, loadSearchCorpus, loadWebster, type IndexBook } from '../src/library.ts';
 
 const SERMONS_VOLUME = 'Sermons of the Prophet Joseph Smith';
 const WEBSTER_DIR = new URL('../data/gen/webster/', import.meta.url);
@@ -131,4 +131,15 @@ test('loadBook rejects a key that is not in the index', () => {
 
 test('loadSearchCorpus rejects an unknown volume', () => {
   assert.throws(() => loadSearchCorpus('Apocrypha'), /Unknown volume/);
+});
+
+test('filesRead lists each data/gen file read so far, once, in first-read order (SBD-11 diagnostic)', () => {
+  loadIndex();
+  loadBook('alma');
+  loadBook('alma');
+  const read = filesRead();
+  assert.ok(read.includes('index.json'));
+  assert.ok(read.includes('books/alma.json'));
+  assert.equal(new Set(read).size, read.length);
+  assert.ok(read.indexOf('index.json') < read.indexOf('books/alma.json'));
 });

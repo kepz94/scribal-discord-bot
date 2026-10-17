@@ -4,12 +4,14 @@
 //   signature missing / invalid      → 401, empty body
 //   PING (type 1)                    → {"type":1}
 //   command (2) / button (3)         → src/handlers.ts (SBD-8)
+//   autocomplete (4)                 → src/autocomplete.ts, type 8 choices (SBD-11)
 //   anything else                    → ephemeral "Not built yet."
 //   exception                        → ephemeral "Something went wrong. Try again." + console.error(type, name)
 // Reads only DISCORD_PUBLIC_KEY from the environment.
 import { verify } from '../src/verify.ts';
 import { ephemeral } from '../src/respond.ts';
 import { handle, type Interaction } from '../src/handlers.ts';
+import { autocomplete } from '../src/autocomplete.ts';
 
 // Handler time per interaction, logged for SBD-10's cold/warm measurement. "cold" = the first interaction this
 // function instance has handled (data files not yet loaded).
@@ -36,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
       return json({ type: 1 });
     }
     const started = performance.now();
-    const response = handle(interaction);
+    const response = type === 4 ? autocomplete(interaction) : handle(interaction);
     console.log('interaction', { type, name, ms: Math.round(performance.now() - started), cold: handled++ === 0 });
     return json(response);
   } catch (err) {
