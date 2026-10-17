@@ -60,9 +60,26 @@ test('a signed PING → 200 {"type":1}', async () => {
   assert.deepEqual(await res.json(), { type: 1 });
 });
 
-test('any other signed interaction → ephemeral "Not built yet."', async () => {
-  const { result: res } = await quietly(() => withKey(PUBLIC_HEX, () => POST(request('{"type":2,"data":{"name":"verse"}}'))));
+test('an interaction type the bot does not handle (modal submit) → ephemeral "Not built yet."', async () => {
+  const { result: res } = await quietly(() => withKey(PUBLIC_HEX, () => POST(request('{"type":5,"data":{"custom_id":"m"}}'))));
   assert.deepEqual(await res.json(), { type: 4, data: { content: 'Not built yet.', flags: 64, allowed_mentions: { parse: [] } } });
+});
+
+test('a signed /verse goes through the handlers to a public card (SBD-8)', async () => {
+  const body = JSON.stringify({ type: 2, data: { name: 'verse', options: [{ name: 'reference', type: 3, value: 'alma 32:21' }] } });
+  const { result: res } = await quietly(() => withKey(PUBLIC_HEX, () => POST(request(body))));
+  const json = await res.json();
+  assert.equal(json.type, 4);
+  assert.equal(json.data.embeds[0].title, 'Alma 32:21');
+  assert.equal(json.data.flags, undefined);
+});
+
+test('a signed button press edits the message in place (SBD-8)', async () => {
+  const body = JSON.stringify({ type: 3, data: { custom_id: 'c:1:3:1nephi', component_type: 2 }, message: { content: '' } });
+  const { result: res } = await quietly(() => withKey(PUBLIC_HEX, () => POST(request(body))));
+  const json = await res.json();
+  assert.equal(json.type, 7);
+  assert.match(json.data.embeds[0].footer.text, /^1 Nephi 3 · page 2 of \d+$/);
 });
 
 test('an exception → ephemeral "Something went wrong. Try again." and console.error', async () => {
