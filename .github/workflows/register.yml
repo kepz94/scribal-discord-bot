@@ -1,0 +1,24 @@
+# Scribal Bot for Discord v1 (SBD-7): registers the slash commands for the server. Started by hand only
+# (GitHub → Actions → Register commands → Run workflow). Re-running replaces the set; it never duplicates it.
+name: Register commands
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Register guild commands
+        run: node scripts/register-commands.ts
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
