@@ -1,4 +1,5 @@
-# Scribal Bot for Discord v1 (SBD-7): registers the slash commands for the server. Started by hand only
+# Scribal Bot for Discord v1 (SBD-7): registers the slash commands for the server(s). SBD-13 (v1.2): the optional
+# DISCORD_GUILD_IDS secret (comma-separated server IDs) adds servers after DISCORD_GUILD_ID. Started by hand only
 # (GitHub → Actions → Register commands → Run workflow). Re-running replaces the set; it never duplicates it.
 name: Register commands
 
@@ -21,4 +22,5 @@ jobs:
         env:
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_GUILD_IDS: ${{ secrets.DISCORD_GUILD_IDS }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}

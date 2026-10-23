@@ -123,3 +123,79 @@ test('the workflow runs only by hand, on Node 24, with the three secrets', () =>
     assert.match(yml, new RegExp(`${name}: \\$\\{\\{ secrets\\.${name} \\}\\}`));
   }
 });
+
+// SBD-13 (v1.2): more than one server. DISCORD_GUILD_IDS (comma-separated) adds servers to DISCORD_GUILD_ID.
+const OLD = '444455556666';
+const NEW_A = '1563071323285098559';
+const NEW_B = '777788889999';
+const okFor = (calls: Call[]): typeof fetch =>
+  (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init ?? {} });
+    return new Response(JSON.stringify(COMMANDS), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+const guildOf = (c: Call): string => c.url.split('/guilds/')[1].split('/')[0];
+
+test('DISCORD_GUILD_IDS registers in every listed server after DISCORD_GUILD_ID, in order', async () => {
+  const calls: Call[] = [];
+  const result = await register({ ...ENV, DISCORD_GUILD_IDS: `${NEW_A},${NEW_B}` }, okFor(calls));
+  assert.deepEqual(calls.map(guildOf), [OLD, NEW_A, NEW_B]);
+  for (const c of calls) assert.deepEqual(echo(c.init), JSON.parse(JSON.stringify(COMMANDS)));
+  assert.equal(result.ok, true);
+});
+
+test('with several servers each line says which server it is, by position only', async () => {
+  const result = await register({ ...ENV, DISCORD_GUILD_IDS: NEW_A }, okFor([]));
+  assert.deepEqual(result.lines, [
+    'Server 1 of 2: Discord answered 200',
+    'Server 1 of 2: Registered: /verse, /chapter, /define, /help, /search',
+    'Server 2 of 2: Discord answered 200',
+    'Server 2 of 2: Registered: /verse, /chapter, /define, /help, /search',
+  ]);
+  for (const id of [OLD, NEW_A]) assert.ok(!result.lines.join('\n').includes(id));
+});
+
+test('spaces and a repeated ID are ignored', async () => {
+  const calls: Call[] = [];
+  await register({ ...ENV, DISCORD_GUILD_IDS: ` ${NEW_A} , ${OLD},${NEW_A}, ` }, okFor(calls));
+  assert.deepEqual(calls.map(guildOf), [OLD, NEW_A]);
+});
+
+test('DISCORD_GUILD_IDS alone is enough', async () => {
+  const calls: Call[] = [];
+  const result = await register({ ...ENV, DISCORD_GUILD_ID: '', DISCORD_GUILD_IDS: NEW_A }, okFor(calls));
+  assert.deepEqual(calls.map(guildOf), [NEW_A]);
+  assert.deepEqual(result.lines, ['Discord answered 200', 'Registered: /verse, /chapter, /define, /help, /search']);
+});
+
+test('no server at all fails before any request', async () => {
+  const calls: Call[] = [];
+  const result = await register({ ...ENV, DISCORD_GUILD_ID: '' }, okFor(calls));
+  assert.equal(calls.length, 0);
+  assert.deepEqual(result, { ok: false, lines: ['Missing DISCORD_GUILD_ID or DISCORD_GUILD_IDS'] });
+});
+
+test('an entry that is not a server ID fails before any request, by position only', async () => {
+  const calls: Call[] = [];
+  const result = await register({ ...ENV, DISCORD_GUILD_IDS: `${NEW_A},my-server` }, okFor(calls));
+  assert.equal(calls.length, 0);
+  assert.deepEqual(result, { ok: false, lines: ['DISCORD_GUILD_IDS entry 2 is not a server ID (digits only)'] });
+});
+
+test('one server failing still registers the others, and the run fails', async () => {
+  const calls: Call[] = [];
+  const mixed = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init ?? {} });
+    const bad = String(url).includes(`/guilds/${NEW_A}/`);
+    return new Response(JSON.stringify(bad ? { message: 'Missing Access', code: 50001 } : COMMANDS), { status: bad ? 403 : 200 });
+  }) as typeof fetch;
+  const result = await register({ ...ENV, DISCORD_GUILD_IDS: `${NEW_A},${NEW_B}` }, mixed);
+  assert.deepEqual(calls.map(guildOf), [OLD, NEW_A, NEW_B]);
+  assert.equal(result.ok, false);
+  assert.ok(result.lines.includes('Server 2 of 3: Error: Missing Access (code 50001)'));
+  assert.ok(result.lines.includes('Server 3 of 3: Registered: /verse, /chapter, /define, /help, /search'));
+});
+
+test('the workflow also passes DISCORD_GUILD_IDS from secrets', () => {
+  const yml = readFileSync(new URL('../.github/workflows/register.yml', import.meta.url), 'utf8');
+  assert.match(yml, /DISCORD_GUILD_IDS: \$\{\{ secrets\.DISCORD_GUILD_IDS \}\}/);
+});

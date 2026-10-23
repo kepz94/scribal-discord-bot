@@ -5,13 +5,16 @@
 //   · read 2026-10-17 (API v10; User-Agent format per https://docs.discord.com/developers/reference#user-agent)
 // Reads DISCORD_APPLICATION_ID, DISCORD_GUILD_ID and DISCORD_BOT_TOKEN from the environment and prints only
 // Discord's status, the registered command names, or Discord's error message and code: never an ID or the token.
+// SBD-13 (v1.2): DISCORD_GUILD_IDS (comma-separated, optional) adds more servers after DISCORD_GUILD_ID; the same set
+// is PUT to each one, and with more than one server every line is prefixed "Server n of N: " (position, never the ID).
 import { fileURLToPath } from 'node:url';
 
 const API = 'https://discord.com/api/v10';
 const USER_AGENT = 'DiscordBot (https://github.com/kepz94/scribal-discord-bot, 1.0.0)';
 const CHAT_INPUT = 1;
 const STRING = 3;
-const ENV_NAMES = ['DISCORD_APPLICATION_ID', 'DISCORD_GUILD_ID', 'DISCORD_BOT_TOKEN'] as const;
+const ENV_NAMES = ['DISCORD_APPLICATION_ID', 'DISCORD_BOT_TOKEN'] as const;
+const SERVER_ID = /^\d+$/;
 
 type Option = {
   type: number;
@@ -87,7 +90,31 @@ export async function register(env: Record<string, string | undefined>, fetchImp
   const missing = ENV_NAMES.filter((name) => !env[name]);
   if (missing.length > 0) return { ok: false, lines: [`Missing ${missing.join(', ')}`] };
 
-  const res = await fetchImpl(`${API}/applications/${env.DISCORD_APPLICATION_ID}/guilds/${env.DISCORD_GUILD_ID}/commands`, {
+  // DISCORD_GUILD_ID first (the original server), then each DISCORD_GUILD_IDS entry; blanks and repeats dropped.
+  const extra = (env.DISCORD_GUILD_IDS ?? '').split(',').map((id) => id.trim());
+  const badAt = extra.findIndex((id) => id !== '' && !SERVER_ID.test(id));
+  if (badAt >= 0) {
+    const position = extra.slice(0, badAt + 1).filter((id) => id !== '').length;
+    return { ok: false, lines: [`DISCORD_GUILD_IDS entry ${position} is not a server ID (digits only)`] };
+  }
+  const guilds: string[] = [];
+  for (const id of [(env.DISCORD_GUILD_ID ?? '').trim(), ...extra]) if (id !== '' && !guilds.includes(id)) guilds.push(id);
+  if (guilds.length === 0) return { ok: false, lines: ['Missing DISCORD_GUILD_ID or DISCORD_GUILD_IDS'] };
+
+  let ok = true;
+  const lines: string[] = [];
+  for (const [i, guild] of guilds.entries()) {
+    const one = await registerGuild(env, guild, fetchImpl);
+    ok = ok && one.ok;
+    const prefix = guilds.length > 1 ? `Server ${i + 1} of ${guilds.length}: ` : '';
+    for (const line of one.lines) lines.push(prefix + line);
+  }
+  return { ok, lines };
+}
+
+// One server: the SBD-7 request and checks, unchanged.
+async function registerGuild(env: Record<string, string | undefined>, guild: string, fetchImpl: typeof fetch): Promise<{ ok: boolean; lines: string[] }> {
+  const res = await fetchImpl(`${API}/applications/${env.DISCORD_APPLICATION_ID}/guilds/${guild}/commands`, {
     method: 'PUT',
     headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
     body: JSON.stringify(COMMANDS),
